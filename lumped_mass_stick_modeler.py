@@ -154,8 +154,12 @@ class LumpedMassStickModel:
         ax.set_ylabel('position')
         ax.set_xlim(-1*xmaxabs, xmaxabs)
 
-        # animation
+        # format line
         line, = ax.plot(xdata, ydata)
+        line.set_marker('o')
+        line.set_markersize(10)
+
+        # animate line
         def init():
             line.set_xdata(xdata)
             return line,
@@ -163,6 +167,8 @@ class LumpedMassStickModel:
         def animate(i):
             xdata = [0] + self.disps[mode,:,i].tolist()
             line.set_xdata(xdata)  # update the data.
+            #line.set_marker('o')
+            #line.set_markersize(10)
             return line,
 
         ani = animation.FuncAnimation(
