@@ -1,5 +1,5 @@
 # Lumped Mass Stick Modeler
-Simple python tool to view the motions of MDOF lumped mass stick models (LMSM).
+Simple python object that allows the modeling of MDOF lumped mass stick models (LMSM) subjected to dynamic loading.
 
 ## How to Use
 See the following jupyter notebooks:
