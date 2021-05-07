@@ -165,11 +165,14 @@ class LumpedMassStickModel:
             return line,
 
         def animate(i):
-            xdata = [0] + self.disps[mode,:,i].tolist()
-            line.set_xdata(xdata)  # update the data.
-            #line.set_marker('o')
-            #line.set_markersize(10)
-            return line,
+            if i < len(self.times):
+                xdata = [0] + self.disps[mode,:,i].tolist()
+                line.set_xdata(xdata)  # update the data.
+                #line.set_marker('o')
+                #line.set_markersize(10)
+                return line,
+            else:
+                return line,
 
         ani = animation.FuncAnimation(
             fig, animate, init_func=init, interval=1000*dt, blit=True, save_count=50)
