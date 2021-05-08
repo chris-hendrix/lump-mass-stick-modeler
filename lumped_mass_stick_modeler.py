@@ -6,7 +6,7 @@ import math
 
 
 class LumpedMassStickModel:
-    def __init__(self, masses, stiffnesses, damp_coeffs, loadings=None, timestep=None, node_locations=None, name=''):
+    def __init__(self, masses, stiffnesses, damp_coeffs, loadings=None, timestep=None, initial_ylocs=None, name=''):
         self.name = name
         self.masses = masses
         self.stiffnesses = stiffnesses
@@ -14,10 +14,21 @@ class LumpedMassStickModel:
         self.nodes = len(masses)
         self.debug = []
         self.calc_modal_propoerties()
-        self.node_locations = node_locations
+        self.initial_ylocs = initial_ylocs
 
         # default mass locations spaced at 1
-        if node_locations == None: self.node_locations = np.arange(1, self.nodes+1, 1)
+        if initial_ylocs == None: initial_ylocs = np.arange(1, self.nodes+1, 1)
+
+        # set current locs as initial
+        self.initial_xlocs = np.zeros(shape=(self.nodes))
+        self.initial_ylocs = initial_ylocs
+
+        # set link lengths
+        self.link_lengths=[]
+        for i in range(0, self.nodes):
+            length = initial_ylocs[i]
+            if i>0: length = initial_ylocs[i] - initial_ylocs[i-1]
+            self.link_lengths.append(length)
 
         # set_loadings if not equal to None
         if not loadings == None and not timestep==None: self.set_loadings(loadings, timestep)
@@ -101,27 +112,38 @@ class LumpedMassStickModel:
         wnd = self.ang_freqs_damped
         nodes = self.nodes
         modes = self.modes
+        xlocs = self.initial_xlocs.copy()
+        ylocs = self.initial_ylocs.copy()
         dt = timestep
         steps = len(p[0])
         t = np.arange(steps) * dt
         
-        # setup disp, vel, and acc matrices
-        u_mat = np.zeros(shape=(modes, nodes, steps))
-        v_mat = np.zeros(shape=(modes, nodes, steps))
-        a_mat = np.zeros(shape=(modes, nodes, steps))
+        # setup disp, vel, and acc matrices for x and y directions
+        ux_mat = np.zeros(shape=(modes, nodes, steps))
+        vx_mat = np.zeros(shape=(modes, nodes, steps))
+        ax_mat = np.zeros(shape=(modes, nodes, steps))
+        uy_mat = np.zeros(shape=(modes, nodes, steps))
+        xloc_mat = np.zeros(shape=(modes, nodes, steps))
+        yloc_mat = np.zeros(shape=(modes, nodes, steps))
+
 
         for node in range(0, nodes):
+
+            # get link height
+            length = self.link_lengths[node]
+
             for mode in range(0, modes):
                 h = 1/(mm*wnd[mode])*np.exp(-xim[mode]*wnd[mode]*t)*np.sin(wnd[mode]*t)
                 q = (np.convolve(pm[mode].flatten(), h)*dt)[0:steps]
                 self.debug.append({'q':q})
-                u = phi[mode][node]*q
-                v = np.gradient(u, dt)
-                a = np.gradient(v, dt)
+                ux = phi[mode][node]*q
+                vx = np.gradient(ux, dt)
+                ax = np.gradient(vx, dt)
 
-                u_mat[mode,node,:] = u
-                v_mat[mode,node,:] = v
-                a_mat[mode,node,:] = a
+                # set matrix values
+                ux_mat[mode,node,:] = ux
+                vx_mat[mode,node,:] = vx
+                ax_mat[mode,node,:] = ax
         
         # set loading properties
         self.loadings = p
@@ -129,28 +151,29 @@ class LumpedMassStickModel:
         self.timestep = timestep
         self.modal_loadings = pm
 
-        # set disp, vel, acc matrix properties
-        self.disps = u_mat
-        self.vels = v_mat
-        self.accs = a_mat
+        # set x-direction disp, vel, acc matrix properties
+        self.xdisps = ux_mat
+        self.xvels = vx_mat
+        self.xaccs = ax_mat
 
     def get_animation(self,fig, ax, mode=0):
 
         # get data and add leading zero
         dt = self.timestep
+        steps = min(10000,len(self.times))
         xdata = [0] + np.arange(self.nodes).tolist()
-        ydata = [0] + self.node_locations.tolist()
+        ydata = [0] + self.initial_ylocs.tolist()
 
         # get maxab bounds
-        xmin = self.disps[mode,:,:].min()
-        xmax = self.disps[mode,:,:].max()
+        xmin = self.xdisps[mode,:,:].min()
+        xmax = self.xdisps[mode,:,:].max()
         xmaxabs = max(abs(xmin), abs(xmax))
 
         # set ax properties
         fnd = self.freqs_damped[mode]
         title = f'{self.name}\n(mode={mode}, fnd={round(fnd,3)}Hz)'
         ax.set_title(title)
-        ax.set_xlabel('disp')
+        ax.set_xlabel(f'disp\n(time={0}s')
         ax.set_ylabel('position')
         ax.set_xlim(-1*xmaxabs, xmaxabs)
 
@@ -166,8 +189,9 @@ class LumpedMassStickModel:
 
         def animate(i):
             if i < len(self.times):
-                xdata = [0] + self.disps[mode,:,i].tolist()
+                xdata = [0] + self.xdisps[mode,:,i].tolist()
                 line.set_xdata(xdata)  # update the data.
+                ax.set_xlabel(f'disp (t={round(i*dt,5)}s)')
                 #line.set_marker('o')
                 #line.set_markersize(10)
                 return line,
@@ -175,15 +199,15 @@ class LumpedMassStickModel:
                 return line,
 
         ani = animation.FuncAnimation(
-            fig, animate, init_func=init, interval=1000*dt, blit=True, save_count=50)
+            fig, animate, init_func=init, interval=1000*dt, blit=True, save_count=steps)
         
         return ani
 
     def get_time_history(self, mode=0, node=0, motion='a'):
         motion = motion[0].lower()
-        motions = self.accs
-        if motion=='d': motions = self.disps
-        if motion=='v': motions = self.vels
+        motions = self.xaccs
+        if motion=='d': motions = self.xdisps
+        if motion=='v': motions = self.xvels
         if motion=='l': motions = self.loadings
 
         return self.times, motions[mode][node]
